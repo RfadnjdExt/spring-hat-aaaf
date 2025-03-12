@@ -115,10 +115,28 @@ export async function GET(request: NextRequest) {
     // Extract file password from request params if available
     const filePassword = request.nextUrl.searchParams.get('password');
 
-    // Fetch file entries and return as a JSON response
+    // Fetch file entries
     const fileEntries = await entries(fileId, token, filePassword ?? undefined);
-    return NextResponse.json(fileEntries);
+
+    // Get the first file in the list (you can modify to handle multiple files)
+    const file = fileEntries[0];
+
+    // Fetch the file data directly
+    const fileResponse = await fetch(file.url);
     
+    if (!fileResponse.ok) {
+      return NextResponse.json({ error: 'Failed to download the file' }, { status: 500 });
+    }
+
+    // Return the file as a stream
+    const fileStream = fileResponse.body;
+    return new NextResponse(fileStream, {
+      headers: {
+        'Content-Type': file.mimetype,
+        'Content-Disposition': `attachment; filename="${file.title}.${file.mimetype.split('/')[1]}"`, // Set filename
+      },
+    });
+
   } catch (error) {
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
