@@ -50,7 +50,12 @@ async function entries(fileId: string, token: string, password?: string) {
   }
 
   const url = new URL(`https://api.gofile.io/contents/${fileId}`);
-  Object.entries(queryParams).forEach(([key, value]) => url.searchParams.append(key, value));
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, String(value)); // Ensure value is a string
+    }
+  });
+
 
   const response = await fetch(url.toString(), {
     method: 'GET',
