@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     }
     const fileId = fileIdMatch[1];
 
-    // Initialize by fetching or creating the account token
+    // Initialize by fetching or creating the account token (guestToken)
     const token = await initialize();
 
     // Extract file password from request params if available
@@ -121,8 +121,13 @@ export async function GET(request: NextRequest) {
     // Get the first file in the list (you can modify to handle multiple files)
     const file = fileEntries[0];
 
-    // Fetch the file data directly
-    const fileResponse = await fetch(file.url);
+    // Fetch the file data directly using guestToken in the headers
+    const fileResponse = await fetch(file.url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`, // Use the guestToken as the authorization header
+      },
+    });
     
     if (!fileResponse.ok) {
       return NextResponse.json({ error: 'Failed to download the file' }, { status: 500 });
