@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     const videoPassword = request.nextUrl.searchParams.get('videopassword');
 
     // Fetch file entries and return as a JSON response
-    const fileEntries = await entries(fileId, token, videoPassword);
+    const fileEntries = await entries(fileId, token, videoPassword ?? undefined);
     return NextResponse.json(fileEntries);
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
