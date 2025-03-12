@@ -1,152 +1,62 @@
-// Import necessary modules for Next.js and Node.js
-import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+let tokenCache: string | null = null;
+let fileCache = new Map();
 
-interface GofileResponse {
-  data: {
-    children: Record<string, GofileFile>;
-  };
-  status: string;
-}
-
-interface GofileFile {
-  id: string;
-  name: string;
-  mimetype: string;
-  link: string;
-  size: number;
-  createTime: number;
-}
-
-// Fetch account token from cookies or create a guest account
 async function initialize() {
-  let token = null;
+  if (tokenCache) return tokenCache;
 
-  // In a real application, you'd get cookies here, for now, we simulate
-  const cookies = new Map(); // Simulate cookies storage
-  if (cookies.has('accountToken')) {
-    token = cookies.get('accountToken');
-  } else {
+  const cookies = new Map();
+  let token = cookies.get('accountToken');
+  if (!token) {
     const response = await fetch('https://api.gofile.io/accounts', {
       method: 'POST',
       body: JSON.stringify({}),
     });
     const accountData = await response.json();
     token = accountData.data.token;
-
-    // Simulate setting a cookie
     cookies.set('accountToken', token);
+    tokenCache = token;  // Cache the token
   }
-
   return token;
 }
 
-// Function to handle entries for files
 async function entries(fileId: string, token: string, password?: string) {
-  const queryParams: any = { wt: '4fd6sg89d7s6' };
-  
-  if (password) {
-    queryParams.password = crypto.createHash('sha256').update(password).digest('hex');
-  }
+  if (fileCache.has(fileId)) return fileCache.get(fileId);
 
-  const url = new URL(`https://api.gofile.io/contents/${fileId}`);
-  Object.entries(queryParams).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, String(value)); // Ensure value is a string
-    }
-  });
-
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-  const files: GofileResponse = await response.json();
-
-  const status = files.status;
-  if (status === 'error-passwordRequired') {
-    throw new Error('This file is protected by a password.');
-  } else if (status !== 'ok') {
-    throw new Error(`Gofile API error: status ${status}`);
-  }
-
-  const result = [];
-  let foundFiles = false;
-  for (const file of Object.values(files.data.children)) {
-    foundFiles = true;
-    if (file.link) {
-      result.push({
-        id: file.id,
-        title: file.name.split('.').slice(0, -1).join('.'),
-        url: file.link,
-        mimetype: file.mimetype,
-        filesize: file.size,
-        release_timestamp: file.createTime,
-      });
-    }
-  }
-
-  if (!foundFiles) {
-    throw new Error('No files found at the provided URL.');
-  }
-
-  return result;
+  const files = await fetchFileEntriesFromAPI(fileId, token, password);
+  fileCache.set(fileId, files);
+  return files;
 }
 
-// Next.js API handler
 export async function GET(request: NextRequest) {
   try {
     const url = request.nextUrl.searchParams.get('url');
-    if (!url) {
-      return NextResponse.json({ error: 'No URL provided' }, { status: 400 });
-    }
+    if (!url) return NextResponse.json({ error: 'No URL provided' }, { status: 400 });
 
-    // Extract the fileId from the URL using a regex pattern
     const fileIdMatch = url.match(/https:\/\/gofile\.io\/d\/([^/]+)/);
-    if (!fileIdMatch || !fileIdMatch[1]) {
-      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
-    }
+    if (!fileIdMatch || !fileIdMatch[1]) return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+
     const fileId = fileIdMatch[1];
-
-    // Initialize by fetching or creating the account token (guestToken)
     const token = await initialize();
-
-    // Extract file password from request params if available
     const filePassword = request.nextUrl.searchParams.get('password');
-
-    // Fetch file entries
     const fileEntries = await entries(fileId, token, filePassword ?? undefined);
-
-    // Get the first file in the list (you can modify to handle multiple files)
     const file = fileEntries[0];
 
-    // Fetch the file data directly using guestToken in the headers
     const fileResponse = await fetch(file.url, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`, // Use the guestToken as the authorization header
-      },
+      headers: { 'Authorization': `Bearer ${token}` },
     });
-    
-    if (!fileResponse.ok) {
-      return NextResponse.json({ error: 'Failed to download the file' }, { status: 500 });
-    }
 
-    // Return the file as a stream
+    if (!fileResponse.ok) return NextResponse.json({ error: 'Failed to download the file' }, { status: 500 });
+
     const fileStream = fileResponse.body;
     return new NextResponse(fileStream, {
       headers: {
         'Content-Type': file.mimetype,
-        'Content-Disposition': `attachment; filename="${file.title}.${file.mimetype.split('/')[1]}"`, // Set filename
+        'Content-Disposition': `attachment; filename="${file.title}.${file.mimetype.split('/')[1]}"`,
       },
     });
 
   } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    } else {
-      return NextResponse.json({ error: 'An unknown error occurred' }, { status: 500 });
-    }
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }
