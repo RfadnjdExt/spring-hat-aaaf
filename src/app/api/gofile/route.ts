@@ -66,7 +66,7 @@ async function entries(fileId: string, token: string, password?: string) {
 
   const status = files.status;
   if (status === 'error-passwordRequired') {
-    throw new Error('This video is protected by a password.');
+    throw new Error('This file is protected by a password.');
   } else if (status !== 'ok') {
     throw new Error(`Gofile API error: status ${status}`);
   }
@@ -74,17 +74,13 @@ async function entries(fileId: string, token: string, password?: string) {
   const result = [];
   let foundFiles = false;
   for (const file of Object.values(files.data.children)) {
-    const [fileType, fileFormat] = file.mimetype.split('/');
-    if (fileType !== 'video' && fileType !== 'audio' && fileFormat !== 'vnd.mts') {
-      continue;
-    }
-
     foundFiles = true;
     if (file.link) {
       result.push({
         id: file.id,
         title: file.name.split('.').slice(0, -1).join('.'),
         url: file.link,
+        mimetype: file.mimetype,
         filesize: file.size,
         release_timestamp: file.createTime,
       });
@@ -92,7 +88,7 @@ async function entries(fileId: string, token: string, password?: string) {
   }
 
   if (!foundFiles) {
-    throw new Error('No video/audio found at the provided URL.');
+    throw new Error('No files found at the provided URL.');
   }
 
   return result;
@@ -116,11 +112,11 @@ export async function GET(request: NextRequest) {
     // Initialize by fetching or creating the account token
     const token = await initialize();
 
-    // Extract video password from request params if available
-    const videoPassword = request.nextUrl.searchParams.get('videopassword');
+    // Extract file password from request params if available
+    const filePassword = request.nextUrl.searchParams.get('password');
 
     // Fetch file entries and return as a JSON response
-    const fileEntries = await entries(fileId, token, videoPassword ?? undefined);
+    const fileEntries = await entries(fileId, token, filePassword ?? undefined);
     return NextResponse.json(fileEntries);
     
   } catch (error) {
