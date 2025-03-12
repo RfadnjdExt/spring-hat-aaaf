@@ -56,7 +56,6 @@ async function entries(fileId: string, token: string, password?: string) {
     }
   });
 
-
   const response = await fetch(url.toString(), {
     method: 'GET',
     headers: {
@@ -123,10 +122,12 @@ export async function GET(request: NextRequest) {
     // Fetch file entries and return as a JSON response
     const fileEntries = await entries(fileId, token, videoPassword ?? undefined);
     return NextResponse.json(fileEntries);
-  catch (error) {
+    
+  } catch (error) {
     if (error instanceof Error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     } else {
-        return NextResponse.json({ error: 'An unknown error occurred' }, { status: 500 });
+      return NextResponse.json({ error: 'An unknown error occurred' }, { status: 500 });
     }
+  }
 }
